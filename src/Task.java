@@ -1,6 +1,6 @@
 import java.time.*;
 
-public class InputInfo {
+public class Task implements Comparable<Task>{
 	//CLASS VARIABLES
 	private final LocalTime requestTime;
 	private final String direction;
@@ -8,7 +8,7 @@ public class InputInfo {
 	private final int destinationFloor;
 
 	//CONSTRUCTORS
-	InputInfo(String requestTime, String startFloor, String direction, String destinationFloor) {
+	Task(String requestTime, String startFloor, String direction, String destinationFloor) {
 		this.requestTime = LocalTime.parse(requestTime);
 		this.startFloor = Integer.parseInt(startFloor);
 		this.direction = direction;
@@ -38,5 +38,10 @@ public class InputInfo {
 	
 	public int getDestinationFloor() {
 		return this.destinationFloor;
+	}
+
+	@Override
+	public int compareTo(Task o) {
+		return this.destinationFloor - o.destinationFloor;
 	}
 }
