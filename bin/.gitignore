@@ -7,3 +7,5 @@
 /Elevator$Task.class
 /Elevator$Doors.class
 /Elevator$ElevatorState$Motion.class
+/Elevator$TaskGetter.class
+/Elevator$ElevatorState$ElevatorMotion.class
