@@ -35,12 +35,6 @@ public class MainScheduler {
 
 	public synchronized boolean floorPut(Object o) {
 		notifyAll();
-		try {
-			Thread.sleep(50);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 		return elevatorMessageQueue.add(o);
 	}
 
@@ -60,12 +54,6 @@ public class MainScheduler {
 
 	public synchronized boolean elevatorPut(Object o) {
 		notifyAll();
-		try {
-			Thread.sleep(50);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 		return floorMessageQueue.add(o);
 	}
 
