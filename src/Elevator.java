@@ -9,14 +9,24 @@ public class Elevator {
 	private boolean poweredOn;
 	private ElevatorState state;
 	private Doors doors;
-	private TaskComparator taskComparator;
-	private PriorityQueue<Task> taskQueue;
+	private PriorityQueue<Integer> workDoing;
+	private PriorityQueue<Integer> workToDo;
 
 	public Elevator() {
 		state = new ElevatorState();
 		doors = new Doors();
-		taskComparator = new TaskComparator();
-		taskQueue = new PriorityQueue<Elevator.Task>(taskComparator);
+		workDoing = new PriorityQueue<Integer>(new Comparator<Integer>() {
+			@Override
+			public int compare(Integer o1, Integer o2) {
+				return Math.abs(o1 - state.currentFloor) - Math.abs(o2 - state.currentFloor);
+			}
+		});
+		workToDo = new PriorityQueue<Integer>(new Comparator<Integer>() {
+			@Override
+			public int compare(Integer o1, Integer o2) {
+				return Math.abs(o1 - state.currentFloor) - Math.abs(o2 - state.currentFloor);
+			}
+		});
 	}
 
 	public boolean isPoweredOn() {
@@ -108,14 +118,6 @@ public class Elevator {
 
 	}
 
-	private String tasksList() {
-		StringBuilder sb = new StringBuilder("[");
-		for (Task t : taskQueue) {
-			sb.append(t.nextFloor).append(", ");
-		}
-		return sb.append("]").toString();
-	}
-
 	// only need to give Scheduler the ElevatorState to check if the elevator
 	// can stop at a floor. This protects data in Elevator
 	public class ElevatorState {
@@ -133,7 +135,6 @@ public class Elevator {
 			motion = new ElevatorMotion();
 			currentFloor = 1;
 			velocity = ACCELERATION; // i can't prove it but velocity must be >= ACCELERATION
-			direction = 1;
 			metresTravelled = 0;
 		}
 
@@ -168,7 +169,7 @@ public class Elevator {
 		}
 
 		public boolean canStopAtFloor(int floor) {
-			if (taskQueue.isEmpty())
+			if (direction == 0)
 				return true;
 			if ((state.direction == -1 && floor > state.currentFloor)
 					|| (state.direction == 1 && floor < state.currentFloor)) {
@@ -184,16 +185,24 @@ public class Elevator {
 
 		public synchronized void assignTask(Task task) {
 			if (canStopAtFloor(task.startFloor)) {
-				System.out.println("Accepted task (" + task.startFloor + " -> " + task.endFloor + ")");
 
-				taskQueue.add(task);
-				
-				System.out.println("\n" + tasksList() + "\n");
+				if (currentFloor != task.startFloor) {
+					workDoing.add(task.startFloor);
+				}
+				if (currentFloor != task.endFloor) {
+					workDoing.add(task.endFloor);
+				}
+
+				System.out.println("Added task to workDoing (" + task.startFloor + " -> " + task.endFloor + ")");
+
+				System.out.println("\nelev: " + state.currentFloor + "\ndoing: " + workDoing + "\ntodo: " + workToDo);
 
 				if (!isAlive())
 					wakeup();
 			} else {
-				System.out.println("Cannot accept task (" + task.startFloor + " -> " + task.endFloor + ")");
+				System.out.println("Added task to workToDo (" + task.startFloor + " -> " + task.endFloor + ")");
+
+				System.out.println("\nelev: " + state.currentFloor + "\ndoing: " + workDoing + "\ntodo: " + workToDo);
 			}
 		}
 
@@ -219,31 +228,29 @@ public class Elevator {
 			public void run() {
 				velocity = ACCELERATION;
 				metresTravelled = 0;
-				taskComparator.reset();
-				while (poweredOn && !taskQueue.isEmpty()) {
+				while (poweredOn && !workDoing.isEmpty() && !workToDo.isEmpty()) {
 					if (!taskAssigned) {
 						System.out.println("Starting a task");
 					}
 
-					Task currentTask = taskQueue.peek();
-					direction = currentTask.nextFloor > currentFloor ? 1 : -1;
-
-					if (direction > 0) {
-						taskComparator.minFloor = currentTask.nextFloor;
-					} else {
-						taskComparator.maxFloor = currentTask.nextFloor;
+					Integer targetFloor;
+					boolean isWorkToDo = false;
+					if ((targetFloor = workDoing.peek()) == null) {
+						targetFloor = workToDo.peek();
+						isWorkToDo = true;
 					}
+					direction = targetFloor > currentFloor ? 1 : -1;
 
 					taskAssigned = true;
 
-					float distanceToFloor = Math.abs(currentTask.nextFloor - state.currentFloor) * FLOOR_HEIGHT;
+					float distanceToFloor = Math.abs(targetFloor - state.currentFloor) * FLOOR_HEIGHT;
 					float secondsToFloor = distanceToFloor == 0 ? 0 : distanceToFloor / state.velocity;
 
 //					System.out.print(nextFloor + ", " + distanceToFloor + ", " + secondsToFloor + " {} ");
 
 					if (secondsToFloor - 1 < state.secondsToStop()) {
-						if (state.currentFloor == currentTask.nextFloor) {
-							System.out.println("\nArrived at floor " + currentTask.nextFloor);
+						if (state.currentFloor == targetFloor) {
+							System.out.println("\nArrived at floor " + targetFloor);
 
 							velocity = ACCELERATION;
 							metresTravelled = 0;
@@ -252,20 +259,20 @@ public class Elevator {
 							// TODO allow people to press button just in time and open doors again
 							doors.closeDoors();
 
-							if (currentTask.nextFloor == currentTask.endFloor) {
-								System.out.println("Completed task");
-								taskAssigned = false;
-								taskQueue.poll();
-
-								System.out.println("\n" + tasksList() + "\n");
+							if (isWorkToDo) {
+								workToDo.poll();
 							} else {
-								currentTask.nextFloor = currentTask.endFloor;
-								taskQueue.add(taskQueue.poll());
-
-								System.out.println("\n" + tasksList() + "\n");
-
-								System.out.println("Moving towards floor " + taskQueue.peek().nextFloor);
+								workDoing.poll();
 							}
+
+							System.out.println(
+									"\nelev: " + state.currentFloor + "\ndoing: " + workDoing + "\ntodo: " + workToDo);
+
+							if ((targetFloor = workDoing.peek()) == null) {
+								targetFloor = workToDo.peek();
+							}
+
+							System.out.println("Moving towards floor " + targetFloor);
 						} else {
 							if (velocity == TERMINAL_VELOCITY) {
 								System.out.print(".");// + currentFloor
@@ -327,40 +334,6 @@ public class Elevator {
 		}
 	}
 
-	private class TaskComparator implements Comparator<Task> {
-		private int minFloor;
-		private int maxFloor;
-
-		private TaskComparator() {
-			reset();
-		}
-
-		private void reset() {
-			minFloor = -1;
-			maxFloor = Integer.MAX_VALUE;
-		}
-
-		@Override
-		public int compare(Task t1, Task t2) {
-			boolean t1OutOfBounds = (t1.nextFloor < minFloor || t1.nextFloor > maxFloor);
-			boolean t2OutOfBounds = (t2.nextFloor < minFloor || t2.nextFloor > maxFloor);
-			if (t1OutOfBounds && t2OutOfBounds)
-				return 0;
-			if (t1OutOfBounds)
-				return 1;
-			if (t2OutOfBounds)
-				return -1;
-			if (state.direction < 0) {
-				return t2.nextFloor - t1.nextFloor;
-			} else if (state.direction > 0) {
-				return t1.nextFloor - t2.nextFloor;
-			} else {
-				return (int) (t1.timeOfRequest.getTime() - t2.timeOfRequest.getTime());
-			}
-		}
-
-	}
-
 	// This is a model of the Scheduler class, not the real thing
 //	public static class Scheduler {
 //		private final Task test1 = ;
@@ -383,17 +356,13 @@ public class Elevator {
 		private Date timeOfRequest;
 		private int startFloor;
 		private int endFloor;
-		private int nextFloor;
+		private int direction;
 
 		public Task(Date timeOfRequest, int startFloor, int endFloor) {
 			this.timeOfRequest = timeOfRequest;
 			this.startFloor = startFloor;
 			this.endFloor = endFloor;
-			this.nextFloor = startFloor;
-		}
-
-		public boolean pickedUp() {
-			return nextFloor == endFloor;
+			direction = startFloor > endFloor ? -1 : 1;
 		}
 	}
 
