@@ -1,6 +1,6 @@
+import java.util.Comparator;
 import java.util.Date;
 import java.util.PriorityQueue;
-import java.util.Random;
 
 public class Elevator {
 
@@ -9,12 +9,14 @@ public class Elevator {
 	private boolean poweredOn;
 	private ElevatorState state;
 	private Doors doors;
+	private TaskComparator taskComparator;
 	private PriorityQueue<Task> taskQueue;
 
 	public Elevator() {
 		state = new ElevatorState();
 		doors = new Doors();
-		taskQueue = new PriorityQueue<Elevator.Task>();
+		taskComparator = new TaskComparator();
+		taskQueue = new PriorityQueue<Elevator.Task>(taskComparator);
 	}
 
 	public boolean isPoweredOn() {
@@ -106,6 +108,14 @@ public class Elevator {
 
 	}
 
+	private String tasksList() {
+		StringBuilder sb = new StringBuilder("[");
+		for (Task t : taskQueue) {
+			sb.append(t.nextFloor).append(", ");
+		}
+		return sb.append("]").toString();
+	}
+
 	// only need to give Scheduler the ElevatorState to check if the elevator
 	// can stop at a floor. This protects data in Elevator
 	public class ElevatorState {
@@ -177,6 +187,8 @@ public class Elevator {
 				System.out.println("Accepted task (" + task.startFloor + " -> " + task.endFloor + ")");
 
 				taskQueue.add(task);
+				
+				System.out.println("\n" + tasksList() + "\n");
 
 				if (!isAlive())
 					wakeup();
@@ -192,7 +204,7 @@ public class Elevator {
 		private synchronized void wakeup() {
 			if (isAlive())
 				return;
-			
+
 			Thread motionThread = new Thread(motion, "ElevatorMotion");
 			System.out.println("Waking up elevator");
 			motion.running = true;
@@ -207,6 +219,7 @@ public class Elevator {
 			public void run() {
 				velocity = ACCELERATION;
 				metresTravelled = 0;
+				taskComparator.reset();
 				while (poweredOn && !taskQueue.isEmpty()) {
 					if (!taskAssigned) {
 						System.out.println("Starting a task");
@@ -214,6 +227,12 @@ public class Elevator {
 
 					Task currentTask = taskQueue.peek();
 					direction = currentTask.nextFloor > currentFloor ? 1 : -1;
+
+					if (direction > 0) {
+						taskComparator.minFloor = currentTask.nextFloor;
+					} else {
+						taskComparator.maxFloor = currentTask.nextFloor;
+					}
 
 					taskAssigned = true;
 
@@ -232,14 +251,19 @@ public class Elevator {
 							doors.openDoors();
 							// TODO allow people to press button just in time and open doors again
 							doors.closeDoors();
-							
+
 							if (currentTask.nextFloor == currentTask.endFloor) {
 								System.out.println("Completed task");
 								taskAssigned = false;
 								taskQueue.poll();
+
+								System.out.println("\n" + tasksList() + "\n");
 							} else {
 								currentTask.nextFloor = currentTask.endFloor;
 								taskQueue.add(taskQueue.poll());
+
+								System.out.println("\n" + tasksList() + "\n");
+
 								System.out.println("Moving towards floor " + taskQueue.peek().nextFloor);
 							}
 						} else {
@@ -303,6 +327,40 @@ public class Elevator {
 		}
 	}
 
+	private class TaskComparator implements Comparator<Task> {
+		private int minFloor;
+		private int maxFloor;
+
+		private TaskComparator() {
+			reset();
+		}
+
+		private void reset() {
+			minFloor = -1;
+			maxFloor = Integer.MAX_VALUE;
+		}
+
+		@Override
+		public int compare(Task t1, Task t2) {
+			boolean t1OutOfBounds = (t1.nextFloor < minFloor || t1.nextFloor > maxFloor);
+			boolean t2OutOfBounds = (t2.nextFloor < minFloor || t2.nextFloor > maxFloor);
+			if (t1OutOfBounds && t2OutOfBounds)
+				return 0;
+			if (t1OutOfBounds)
+				return 1;
+			if (t2OutOfBounds)
+				return -1;
+			if (state.direction < 0) {
+				return t2.nextFloor - t1.nextFloor;
+			} else if (state.direction > 0) {
+				return t1.nextFloor - t2.nextFloor;
+			} else {
+				return (int) (t1.timeOfRequest.getTime() - t2.timeOfRequest.getTime());
+			}
+		}
+
+	}
+
 	// This is a model of the Scheduler class, not the real thing
 //	public static class Scheduler {
 //		private final Task test1 = ;
@@ -321,7 +379,7 @@ public class Elevator {
 //	}
 
 	// This is a model of the Task class, not the real thing
-	public class Task implements Comparable<Task> {
+	public class Task {
 		private Date timeOfRequest;
 		private int startFloor;
 		private int endFloor;
@@ -333,14 +391,9 @@ public class Elevator {
 			this.endFloor = endFloor;
 			this.nextFloor = startFloor;
 		}
-		
+
 		public boolean pickedUp() {
 			return nextFloor == endFloor;
-		}
-
-		@Override
-		public int compareTo(Task o) {
-			return this.nextFloor - o.nextFloor;
 		}
 	}
 
