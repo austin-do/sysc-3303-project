@@ -186,10 +186,10 @@ public class Elevator {
 		public synchronized void assignTask(Task task) {
 			if (canStopAtFloor(task.startFloor)) {
 
-				if (currentFloor != task.startFloor) {
+				if (currentFloor != task.startFloor && !workDoing.contains(task.startFloor)) {
 					workDoing.add(task.startFloor);
 				}
-				if (currentFloor != task.endFloor) {
+				if (currentFloor != task.endFloor && !workDoing.contains(task.endFloor)) {
 					workDoing.add(task.endFloor);
 				}
 
@@ -200,6 +200,13 @@ public class Elevator {
 				if (!isAlive())
 					wakeup();
 			} else {
+				if (currentFloor != task.startFloor && !workToDo.contains(task.startFloor)) {
+					workToDo.add(task.startFloor);
+				}
+				if (currentFloor != task.endFloor && !workToDo.contains(task.endFloor)) {
+					workToDo.add(task.endFloor);
+				}
+
 				System.out.println("Added task to workToDo (" + task.startFloor + " -> " + task.endFloor + ")");
 
 				System.out.println("\nelev: " + state.currentFloor + "\ndoing: " + workDoing + "\ntodo: " + workToDo);
@@ -228,10 +235,7 @@ public class Elevator {
 			public void run() {
 				velocity = ACCELERATION;
 				metresTravelled = 0;
-				while (poweredOn && !workDoing.isEmpty() && !workToDo.isEmpty()) {
-					if (!taskAssigned) {
-						System.out.println("Starting a task");
-					}
+				while (poweredOn && (!workDoing.isEmpty() || !workToDo.isEmpty())) {
 
 					Integer targetFloor;
 					boolean isWorkToDo = false;
@@ -241,6 +245,9 @@ public class Elevator {
 					}
 					direction = targetFloor > currentFloor ? 1 : -1;
 
+					if (!taskAssigned) {
+						System.out.println("Starting a task (-> " + targetFloor + ")");
+					}
 					taskAssigned = true;
 
 					float distanceToFloor = Math.abs(targetFloor - state.currentFloor) * FLOOR_HEIGHT;
